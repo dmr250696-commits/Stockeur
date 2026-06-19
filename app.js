@@ -1,447 +1,539 @@
-/* ============================================================
-   APP.JS — Logique applicative
-   ============================================================ */
-
-const ALERTES_PIN = '1996';
-let alertesUnlocked = false;
-
-let allItems = [];          // cache mémoire de tous les articles
-let currentItem = null;     // article actuellement affiché dans Recherche
-let currentEmpGroup = [];   // toutes les lignes (même réf, différents emplacements)
-
-/* ---------- Init ---------- */
-document.addEventListener('DOMContentLoaded', async () => {
-  await refreshCache();
-  bindNav();
-  bindRecherche();
-  bindAjout();
-  bindAlertesLock();
-  bindModal();
-  bindExportImport();
-  updateStatusBar();
-});
-
-async function refreshCache() {
-  allItems = await dbGetAll();
-}
-
-function updateStatusBar() {
-  document.getElementById('statusText').textContent =
-    `Données locales — ${allItems.length} référence${allItems.length > 1 ? 's' : ''}`;
-}
-
-/* ---------- Toast ---------- */
-let toastTimer = null;
-function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
-}
-
-/* ---------- Navigation onglets ---------- */
-function bindNav() {
-  document.querySelectorAll('nav.tabs button').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const previousTab = document.querySelector('nav.tabs button.active')?.dataset.tab;
-
-      // Si on quitte l'onglet alertes, on reverrouille systématiquement
-      if (previousTab === 'alertes' && btn.dataset.tab !== 'alertes') {
-        lockAlertes();
-      }
-
-      document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-      btn.classList.add('active');
-      document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
-
-      if (btn.dataset.tab === 'alertes') {
-        if (alertesUnlocked) {
-          renderAlertes();
-        } else {
-          document.getElementById('alertesLocked').style.display = 'block';
-          document.getElementById('alertesContent').style.display = 'none';
-        }
-      }
-    });
-  });
-}
-
-function lockAlertes() {
-  alertesUnlocked = false;
-  document.getElementById('alertesLocked').style.display = 'block';
-  document.getElementById('alertesContent').style.display = 'none';
-  document.getElementById('alertesPinInput').value = '';
-  document.getElementById('alertesPinMsg').textContent = '';
-}
-
-/* ============================================================
-   RECHERCHE
-   ============================================================ */
-function bindRecherche() {
-  const searchRef = document.getElementById('searchRef');
-  const searchDes = document.getElementById('searchDes');
-  const suggRef = document.getElementById('suggRef');
-  const suggDes = document.getElementById('suggDes');
-  const selectEmp = document.getElementById('selectEmp');
-
-  searchRef.addEventListener('input', () => {
-    const q = searchRef.value.trim().toUpperCase();
-    if (!q) { suggRef.style.display = 'none'; return; }
-    const matches = uniqueByRef(allItems.filter(it => it.ref.toUpperCase().includes(q)));
-    renderSuggest(suggRef, matches, item => `<b>${escapeHtml(item.ref)}</b><span>${escapeHtml(item.designation || '')}</span>`, item => selectByRef(item.ref));
-  });
-
-  searchDes.addEventListener('input', () => {
-    const q = searchDes.value.trim().toUpperCase();
-    if (!q) { suggDes.style.display = 'none'; return; }
-    const matches = uniqueByDes(allItems.filter(it => (it.designation || '').toUpperCase().includes(q)));
-    renderSuggest(suggDes, matches, item => `<span>${escapeHtml(item.designation || '')}</span><b>${escapeHtml(item.ref)}</b>`, item => selectByRef(item.ref));
-  });
-
-  selectEmp.addEventListener('change', () => {
-    const idx = Number(selectEmp.value);
-    if (currentEmpGroup[idx]) loadItemIntoForm(currentEmpGroup[idx]);
-  });
-
-  document.querySelectorAll('button.op').forEach(btn => {
-    btn.addEventListener('click', () => adjustQty(Number(btn.dataset.d)));
-  });
-
-  document.getElementById('btnCommander').addEventListener('click', async () => {
-    if (!currentItem) return;
-    if (!confirm('Passer la quantité à zéro pour ' + currentItem.ref + ' ?')) return;
-    currentItem.quantite = 0;
-    await dbUpdate(currentItem);
-    await autoSave();
-    await refreshCache();
-    refreshCurrentItemFromCache();
-    document.getElementById('qtyNum').textContent = '0';
-    document.getElementById('qtyNum').classList.add('low');
-    showToast('Commande enregistrée. Quantité remise à zéro.');
-  });
-
-  document.getElementById('chkS5').addEventListener('change', saveSeuilsFromForm);
-  document.getElementById('chkS10').addEventListener('change', saveSeuilsFromForm);
-
-  document.getElementById('btnResetForm').addEventListener('click', resetSearchForm);
-
-  document.addEventListener('click', (e) => {
-    if (!e.target.closest('#searchRef') && !e.target.closest('#suggRef')) suggRef.style.display = 'none';
-    if (!e.target.closest('#searchDes') && !e.target.closest('#suggDes')) suggDes.style.display = 'none';
-  });
-}
-
-function uniqueByRef(items) {
-  const seen = new Set(); const out = [];
-  for (const it of items) { const k = it.ref.toUpperCase(); if (!seen.has(k)) { seen.add(k); out.push(it); } }
-  return out;
-}
-function uniqueByDes(items) {
-  const seen = new Set(); const out = [];
-  for (const it of items) { const k = (it.designation || '').toUpperCase(); if (!seen.has(k)) { seen.add(k); out.push(it); } }
-  return out;
-}
-
-function renderSuggest(container, items, htmlFn, onClick) {
-  container.innerHTML = '';
-  if (items.length === 0) { container.style.display = 'none'; return; }
-  items.forEach(item => {
-    const div = document.createElement('div');
-    div.innerHTML = htmlFn(item);
-    div.addEventListener('click', () => onClick(item));
-    container.appendChild(div);
-  });
-  container.style.display = 'block';
-}
-
-function selectByRef(ref) {
-  document.getElementById('searchRef').value = ref;
-  document.getElementById('suggRef').style.display = 'none';
-  document.getElementById('suggDes').style.display = 'none';
-
-  currentEmpGroup = allItems.filter(it => it.ref.toUpperCase() === ref.toUpperCase());
-  const select = document.getElementById('selectEmp');
-  select.innerHTML = '';
-  currentEmpGroup.forEach((item, idx) => {
-    const opt = document.createElement('option');
-    opt.value = idx;
-    opt.textContent = item.emplacement;
-    select.appendChild(opt);
-  });
-
-  if (currentEmpGroup.length > 0) {
-    document.getElementById('searchDes').value = currentEmpGroup[0].designation || '';
-    loadItemIntoForm(currentEmpGroup[0]);
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Atelier — Stock</title>
+<meta name="theme-color" content="#1B1F23">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+ 
+<style>
+  :root{
+    --ink:#1B1F23;
+    --ink-soft:#3A4046;
+    --paper:#F6F4EF;
+    --paper-raised:#FFFFFF;
+    --line:#DCD7CC;
+    --rust:#B5502D;
+    --rust-deep:#8E3D22;
+    --brass:#9C8347;
+    --ok:#3E6B4F;
+    --ok-bg:#E7EFE9;
+    --warn-bg:#FBEAE2;
+    --warn-ink:#8E3D22;
+    --mono:'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    --sans:'Inter', -apple-system, system-ui, sans-serif;
   }
-}
-
-function loadItemIntoForm(item) {
-  currentItem = item;
-  document.getElementById('fieldTyp').value = item.type || '';
-  document.getElementById('qtyNum').textContent = item.quantite;
-  document.getElementById('qtyNum').classList.toggle('low', isLow(item));
-  document.getElementById('qtyRefLabel').textContent = item.ref + ' · ' + item.emplacement;
-  document.getElementById('chkS5').checked = !!item.seuil5;
-  document.getElementById('chkS10').checked = !!item.seuil10;
-  document.getElementById('cardQty').style.display = 'block';
-}
-
-function refreshCurrentItemFromCache() {
-  if (!currentItem) return;
-  const updated = allItems.find(it => it.id === currentItem.id);
-  if (updated) currentItem = updated;
-}
-
-function isLow(item) {
-  return (item.seuil5 && item.quantite < 5) || (item.seuil10 && item.quantite < 10);
-}
-
-async function adjustQty(delta) {
-  if (!currentItem) { showToast('Sélectionnez un article.'); return; }
-  const before = currentItem.quantite;
-  const after = before + delta;
-  if (after < 0 && !confirm(`Quantité négative (${after}). Continuer ?`)) return;
-
-  currentItem.quantite = after;
-  await dbUpdate(currentItem);
-  await autoSave();
-  await refreshCache();
-  refreshCurrentItemFromCache();
-
-  document.getElementById('qtyNum').textContent = after;
-  document.getElementById('qtyNum').classList.toggle('low', isLow(currentItem));
-  showToast(`Modifié : ${before} → ${after}`);
-}
-
-async function saveSeuilsFromForm() {
-  if (!currentItem) return;
-  currentItem.seuil5 = document.getElementById('chkS5').checked;
-  currentItem.seuil10 = document.getElementById('chkS10').checked;
-  await dbUpdate(currentItem);
-  await autoSave();
-  await refreshCache();
-  refreshCurrentItemFromCache();
-}
-
-function resetSearchForm() {
-  currentItem = null;
-  currentEmpGroup = [];
-  document.getElementById('searchRef').value = '';
-  document.getElementById('searchDes').value = '';
-  document.getElementById('selectEmp').innerHTML = '<option value="">—</option>';
-  document.getElementById('fieldTyp').value = '';
-  document.getElementById('cardQty').style.display = 'none';
-  document.getElementById('suggRef').style.display = 'none';
-  document.getElementById('suggDes').style.display = 'none';
-}
-
-/* ============================================================
-   AJOUT D'ARTICLE
-   ============================================================ */
-function bindAjout() {
-  document.getElementById('btnAjouter').addEventListener('click', async () => {
-    const ref = document.getElementById('newRef').value.trim();
-    const emp = document.getElementById('newEmp').value.trim();
-
-    if (!ref || !emp) { showToast('Référence et emplacement obligatoires.'); return; }
-
-    const doublon = allItems.some(it =>
-      it.ref.toUpperCase() === ref.toUpperCase() && it.emplacement.toUpperCase() === emp.toUpperCase()
-    );
-    if (doublon) { showToast('Cette référence existe déjà à cet emplacement.'); return; }
-
-    const item = {
-      ref, emplacement: emp,
-      quantite: Number(document.getElementById('newQte').value) || 0,
-      designation: document.getElementById('newDes').value.trim(),
-      type: document.getElementById('newTyp').value.trim(),
-      seuil5: document.getElementById('newS5').checked,
-      seuil10: document.getElementById('newS10').checked
-    };
-
-    await dbAdd(item);
-    await autoSave();
-    await refreshCache();
-    updateStatusBar();
-
-    ['newRef','newEmp','newDes','newTyp'].forEach(id => document.getElementById(id).value = '');
-    document.getElementById('newQte').value = '0';
-    document.getElementById('newS5').checked = false;
-    document.getElementById('newS10').checked = false;
-
-    showToast('Article ajouté à l\'inventaire.');
-  });
-}
-
-/* ============================================================
-   ALERTES — VERROUILLÉES PAR CODE
-   ============================================================ */
-function bindAlertesLock() {
-  const input = document.getElementById('alertesPinInput');
-  const btn = document.getElementById('btnUnlockAlertes');
-  const msg = document.getElementById('alertesPinMsg');
-
-  function tryUnlock() {
-    if (input.value === ALERTES_PIN) {
-      alertesUnlocked = true;
-      document.getElementById('alertesLocked').style.display = 'none';
-      document.getElementById('alertesContent').style.display = 'block';
-      input.value = '';
-      msg.textContent = '';
-      renderAlertes();
-    } else {
-      msg.textContent = 'Code incorrect.';
-      input.value = '';
-      input.focus();
-    }
+ 
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    font-family:var(--sans);
+    background:var(--paper);
+    color:var(--ink);
+    overscroll-behavior-y:contain;
+    padding-bottom:env(safe-area-inset-bottom);
   }
-
-  btn.addEventListener('click', tryUnlock);
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') tryUnlock(); });
-}
-
-function renderAlertes() {
-  const list = document.getElementById('alertesList');
-  const meta = document.getElementById('alertesMeta');
-  const alertes = allItems.filter(isLow);
-
-  if (alertes.length === 0) {
-    list.innerHTML = `<div class="empty-state"><div class="ok-mark">✓</div><p>Tout est au-dessus du seuil</p></div>`;
-    meta.textContent = '';
-    return;
+ 
+  /* ---------- Texture de fond : grille discrète d'atelier ---------- */
+  body::before{
+    content:"";
+    position:fixed; inset:0;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 28px 28px;
+    opacity:0.35;
+    pointer-events:none;
+    z-index:0;
   }
-
-  list.innerHTML = '';
-  alertes.forEach(item => {
-    const row = document.createElement('div');
-    row.className = 'alert-row';
-    row.innerHTML = `
-      <div class="alert-row-top">
-        <div>
-          <div class="alert-ref">${escapeHtml(item.ref)}</div>
-          <div class="alert-des">${escapeHtml(item.designation || '')} · ${escapeHtml(item.emplacement)}</div>
+ 
+  #app{ position:relative; z-index:1; max-width:480px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; }
+ 
+  /* ---------- Header ---------- */
+  header{
+    background:var(--ink);
+    color:var(--paper);
+    padding:18px 18px 16px;
+    position:sticky; top:0; z-index:20;
+    border-bottom:3px solid var(--rust);
+  }
+  .brand{ display:flex; align-items:baseline; justify-content:space-between; }
+  .brand h1{
+    font-family:var(--mono);
+    font-size:18px;
+    font-weight:700;
+    letter-spacing:0.04em;
+    margin:0;
+    text-transform:uppercase;
+  }
+  .brand h1 span{ color:var(--rust); }
+  .status-dot{
+    width:9px; height:9px; border-radius:50%;
+    background:var(--ok);
+    box-shadow:0 0 0 3px rgba(62,107,79,0.25);
+    flex-shrink:0;
+  }
+  .status-row{ display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:10px; letter-spacing:0.06em; color:#A9A39A; margin-top:6px; text-transform:uppercase; }
+ 
+  /* ---------- Onglets ---------- */
+  nav.tabs{
+    display:flex;
+    background:var(--ink);
+    padding:0 18px;
+    gap:0;
+    position:sticky; top:62px; z-index:19;
+  }
+  nav.tabs button{
+    flex:1;
+    background:none; border:none;
+    color:#8A8780;
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:0.05em;
+    text-transform:uppercase;
+    padding:12px 4px;
+    cursor:pointer;
+    border-bottom:2px solid transparent;
+  }
+  nav.tabs button.active{
+    color:var(--paper);
+    border-bottom-color:var(--rust);
+  }
+ 
+  main{ flex:1; padding:18px; padding-bottom:90px; }
+ 
+  .panel{ display:none; animation:fade .18s ease; }
+  .panel.active{ display:block; }
+  @keyframes fade{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
+ 
+  /* ---------- Cartes ---------- */
+  .card{
+    background:var(--paper-raised);
+    border:1px solid var(--line);
+    border-radius:3px;
+    padding:16px;
+    margin-bottom:14px;
+    position:relative;
+  }
+  .card::before{
+    content:attr(data-tag);
+    position:absolute;
+    top:-9px; left:14px;
+    background:var(--paper-raised);
+    padding:0 6px;
+    font-family:var(--mono);
+    font-size:10px;
+    letter-spacing:0.08em;
+    color:var(--brass);
+    text-transform:uppercase;
+  }
+ 
+  label{
+    display:block;
+    font-family:var(--mono);
+    font-size:10.5px;
+    letter-spacing:0.05em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    margin-bottom:5px;
+    margin-top:12px;
+  }
+  label:first-of-type{ margin-top:0; }
+ 
+  input[type=text], input[type=number], select{
+    width:100%;
+    border:1px solid var(--line);
+    background:var(--paper);
+    border-radius:2px;
+    padding:11px 10px;
+    font-size:15px;
+    font-family:var(--sans);
+    color:var(--ink);
+  }
+  input:focus, select:focus{ outline:none; border-color:var(--rust); }
+  input[readonly]{ color:var(--ink-soft); background:#EFEBE2; }
+ 
+  .suggest{
+    margin-top:2px;
+    border:1px solid var(--line);
+    border-top:none;
+    max-height:200px;
+    overflow-y:auto;
+    display:none;
+    background:var(--paper-raised);
+  }
+  .suggest div{
+    padding:10px;
+    font-size:13.5px;
+    border-bottom:1px solid var(--line);
+    display:flex; justify-content:space-between; gap:8px;
+  }
+  .suggest div b{ font-family:var(--mono); color:var(--rust-deep); font-weight:700; }
+  .suggest div:active{ background:var(--warn-bg); }
+ 
+  /* ---------- Affichage quantité ---------- */
+  .qty-block{ text-align:center; padding:6px 0 14px; }
+  .qty-num{
+    font-family:var(--mono);
+    font-size:52px;
+    font-weight:700;
+    line-height:1;
+    color:var(--ink);
+  }
+  .qty-num.low{ color:var(--rust); }
+  .qty-label{ font-family:var(--mono); font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--ink-soft); margin-top:4px; }
+ 
+  .btnrow{ display:flex; gap:8px; margin-bottom:10px; }
+  button.op{
+    flex:1;
+    border:1.5px solid var(--ink);
+    background:var(--paper-raised);
+    color:var(--ink);
+    font-family:var(--mono);
+    font-weight:700;
+    font-size:15px;
+    padding:13px 0;
+    border-radius:2px;
+    cursor:pointer;
+  }
+  button.op:active{ background:var(--ink); color:var(--paper); }
+  button.op:disabled{ opacity:0.35; }
+  button.op.plus{ border-color:var(--ok); color:var(--ok); }
+  button.op.plus:active{ background:var(--ok); color:var(--paper); }
+ 
+  button.primary{
+    width:100%;
+    background:var(--rust);
+    color:var(--paper);
+    border:none;
+    font-family:var(--mono);
+    font-weight:700;
+    font-size:14px;
+    letter-spacing:0.03em;
+    text-transform:uppercase;
+    padding:14px 0;
+    border-radius:2px;
+    cursor:pointer;
+  }
+  button.primary:active{ background:var(--rust-deep); }
+  button.primary:disabled{ opacity:0.4; }
+ 
+  button.ghost{
+    width:100%;
+    background:none;
+    border:1px solid var(--line);
+    color:var(--ink-soft);
+    font-family:var(--mono);
+    font-size:12px;
+    letter-spacing:0.03em;
+    text-transform:uppercase;
+    padding:11px 0;
+    border-radius:2px;
+    cursor:pointer;
+    margin-top:8px;
+  }
+ 
+  .checkline{ display:flex; align-items:center; gap:9px; margin-top:10px; }
+  .checkline input{ width:18px; height:18px; accent-color:var(--rust); }
+  .checkline label{ margin:0; text-transform:none; font-family:var(--sans); font-size:13.5px; color:var(--ink); letter-spacing:0; }
+ 
+  /* ---------- Liste alertes ---------- */
+  .alert-row{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:11px 4px;
+    border-bottom:1px solid var(--line);
+  }
+  .alert-row:last-child{ border-bottom:none; }
+  .alert-ref{ font-family:var(--mono); font-weight:700; color:var(--rust-deep); font-size:13px; }
+  .alert-des{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+  .alert-qty{
+    font-family:var(--mono); font-weight:700; font-size:18px;
+    background:var(--warn-bg); color:var(--warn-ink);
+    padding:3px 9px; border-radius:2px;
+  }
+  .empty-state{ text-align:center; padding:30px 10px; }
+  .empty-state .ok-mark{ font-size:30px; }
+  .empty-state p{ font-family:var(--mono); font-size:12px; color:var(--ok); letter-spacing:0.04em; margin-top:8px; }
+ 
+  /* ---------- Toast ---------- */
+  #toast{
+    position:fixed; left:50%; bottom:22px; transform:translate(-50%, 14px);
+    background:var(--ink); color:var(--paper);
+    font-family:var(--mono); font-size:12.5px;
+    padding:11px 18px; border-radius:3px;
+    opacity:0; pointer-events:none;
+    transition:all .22s ease;
+    max-width:88%; text-align:center;
+    z-index:50;
+    border-left:3px solid var(--rust);
+  }
+  #toast.show{ opacity:1; transform:translate(-50%, 0); }
+ 
+  /* ---------- Compteur bas de carte ---------- */
+  .meta-line{
+    font-family:var(--mono); font-size:10px; color:var(--ink-soft);
+    text-align:right; margin-top:8px; letter-spacing:0.03em;
+  }
+ 
+  ::-webkit-scrollbar{ width:0; height:0; }
+ 
+  /* ---------- Écran de verrouillage ---------- */
+  #lockScreen{
+    position:fixed; inset:0; z-index:100;
+    background:var(--ink);
+    display:flex; align-items:center; justify-content:center;
+    flex-direction:column;
+    padding:24px;
+  }
+  #lockScreen .lock-icon{
+    font-family:var(--mono); font-size:13px; letter-spacing:0.15em;
+    color:var(--brass); text-transform:uppercase; margin-bottom:18px;
+  }
+  #lockScreen input{
+    width:100%; max-width:220px;
+    text-align:center;
+    font-family:var(--mono); font-size:28px; letter-spacing:0.4em;
+    padding:14px 10px;
+    border:1.5px solid var(--rust);
+    border-radius:2px;
+    background:#23282E;
+    color:var(--paper);
+  }
+  #lockScreen input:focus{ outline:none; }
+  #lockScreen .lock-msg{
+    font-family:var(--mono); font-size:11px; color:var(--rust);
+    margin-top:14px; min-height:16px; letter-spacing:0.04em;
+  }
+  #lockScreen .lock-hint{
+    font-family:var(--mono); font-size:10px; color:#6B6960;
+    margin-top:30px; letter-spacing:0.03em; text-align:center;
+  }
+ 
+  /* ---------- Ligne d'alerte avec actions ---------- */
+  .alert-row{ flex-direction:column; align-items:stretch; gap:8px; }
+  .alert-row-top{ display:flex; justify-content:space-between; align-items:center; }
+  .alert-actions{ display:flex; gap:8px; }
+  .alert-actions button{
+    flex:1;
+    font-family:var(--mono); font-size:11px; letter-spacing:0.03em; text-transform:uppercase;
+    padding:9px 0; border-radius:2px; cursor:pointer;
+  }
+  .btn-edit{ background:var(--paper); border:1px solid var(--brass); color:var(--brass); }
+  .btn-edit:active{ background:var(--brass); color:var(--paper); }
+  .btn-del{ background:var(--paper); border:1px solid var(--rust); color:var(--rust); }
+  .btn-del:active{ background:var(--rust); color:var(--paper); }
+ 
+  /* ---------- Modale d'édition ---------- */
+  #editModal{
+    position:fixed; inset:0; z-index:90;
+    background:rgba(27,31,35,0.78);
+    display:none;
+    align-items:flex-end;
+    justify-content:center;
+  }
+  #editModal.show{ display:flex; }
+  #editModal .sheet{
+    width:100%; max-width:480px;
+    background:var(--paper-raised);
+    border-radius:10px 10px 0 0;
+    padding:20px 18px calc(20px + env(safe-area-inset-bottom));
+    max-height:85vh;
+    overflow-y:auto;
+  }
+  #editModal h2{
+    font-family:var(--mono); font-size:13px; letter-spacing:0.05em; text-transform:uppercase;
+    margin:0 0 14px; color:var(--ink); border-bottom:2px solid var(--rust); padding-bottom:10px;
+  }
+  .modal-actions{ display:flex; gap:8px; margin-top:16px; }
+  .modal-actions button{ flex:1; }
+ 
+  .sync-tag{
+    display:inline-flex; align-items:center; gap:5px;
+    font-family:var(--mono); font-size:9.5px; letter-spacing:0.05em; text-transform:uppercase;
+    color:#7C8A7E; margin-left:8px;
+  }
+  .sync-tag.pending{ color:var(--rust); }
+</style>
+</head>
+<body>
+ 
+<div id="app">
+ 
+  <header>
+    <div class="brand">
+      <h1>STOCK<span>//</span>ATELIER</h1>
+      <div class="status-dot" id="statusDot" title="Stockage local actif"></div>
+    </div>
+    <div class="status-row"><span id="statusText">Données locales — 0 référence</span></div>
+  </header>
+ 
+  <nav class="tabs">
+    <button class="active" data-tab="recherche">Recherche</button>
+    <button data-tab="ajout">Ajouter</button>
+    <button data-tab="alertes">Alertes</button>
+  </nav>
+ 
+  <main>
+ 
+    <!-- ===================== RECHERCHE ===================== -->
+    <section class="panel active" id="panel-recherche">
+ 
+      <div class="card" data-tag="Référence">
+        <label>Chercher par référence</label>
+        <input type="text" id="searchRef" placeholder="ex. F2…" autocomplete="off">
+        <div class="suggest" id="suggRef"></div>
+ 
+        <label>Chercher par désignation</label>
+        <input type="text" id="searchDes" placeholder="ex. vis…" autocomplete="off">
+        <div class="suggest" id="suggDes"></div>
+ 
+        <label>Emplacement</label>
+        <select id="selectEmp"><option value="">—</option></select>
+ 
+        <label>Type</label>
+        <input type="text" id="fieldTyp" readonly>
+      </div>
+ 
+      <div class="card" data-tag="Quantité" id="cardQty" style="display:none;">
+        <div class="qty-block">
+          <div class="qty-num" id="qtyNum">0</div>
+          <div class="qty-label" id="qtyRefLabel">—</div>
         </div>
-        <div class="alert-qty">${item.quantite}</div>
+ 
+        <div class="btnrow">
+          <button class="op plus" data-d="1">+1</button>
+          <button class="op" data-d="-1">−1</button>
+          <button class="op" data-d="-5">−5</button>
+          <button class="op" data-d="-10">−10</button>
+        </div>
+ 
+        <button class="primary" id="btnCommander">Commander — quantité à zéro</button>
+ 
+        <div class="checkline">
+          <input type="checkbox" id="chkS5">
+          <label for="chkS5">Alerte sous seuil 5</label>
+        </div>
+        <div class="checkline">
+          <input type="checkbox" id="chkS10">
+          <label for="chkS10">Alerte sous seuil 10</label>
+        </div>
+ 
+        <button class="ghost" id="btnResetForm">Effacer la recherche</button>
       </div>
-      <div class="alert-actions">
-        <button class="btn-edit" data-id="${item.id}">Modifier</button>
-        <button class="btn-del" data-id="${item.id}">Supprimer</button>
+ 
+    </section>
+ 
+    <!-- ===================== AJOUT ===================== -->
+    <section class="panel" id="panel-ajout">
+      <div class="card" data-tag="Nouvel article">
+ 
+        <label>Référence *</label>
+        <input type="text" id="newRef" autocomplete="off">
+ 
+        <label>Emplacement *</label>
+        <input type="text" id="newEmp" autocomplete="off">
+ 
+        <label>Quantité initiale</label>
+        <input type="number" id="newQte" value="0">
+ 
+        <label>Désignation</label>
+        <input type="text" id="newDes" autocomplete="off">
+ 
+        <label>Type</label>
+        <input type="text" id="newTyp" autocomplete="off">
+ 
+        <div class="checkline">
+          <input type="checkbox" id="newS5">
+          <label for="newS5">Alerte sous seuil 5</label>
+        </div>
+        <div class="checkline">
+          <input type="checkbox" id="newS10">
+          <label for="newS10">Alerte sous seuil 10</label>
+        </div>
+ 
+        <button class="primary" id="btnAjouter" style="margin-top:14px;">Ajouter à l'inventaire</button>
       </div>
-    `;
-    list.appendChild(row);
-  });
-
-  list.querySelectorAll('.btn-edit').forEach(b => b.addEventListener('click', () => openEditModal(Number(b.dataset.id))));
-  list.querySelectorAll('.btn-del').forEach(b => b.addEventListener('click', () => deleteItem(Number(b.dataset.id))));
-
-  meta.textContent = `${alertes.length} article${alertes.length > 1 ? 's' : ''} sous le seuil`;
-}
-
-async function deleteItem(id) {
-  const item = allItems.find(it => it.id === id);
-  if (!item) return;
-  if (!confirm(`Supprimer définitivement ${item.ref} (${item.emplacement}) ?`)) return;
-
-  await dbDelete(id);
-  await autoSave();
-  await refreshCache();
-  updateStatusBar();
-  renderAlertes();
-  showToast('Article supprimé.');
-}
-
-/* ============================================================
-   MODALE D'ÉDITION
-   ============================================================ */
-let editingId = null;
-
-function bindModal() {
-  document.getElementById('btnEditCancel').addEventListener('click', closeEditModal);
-  document.getElementById('btnEditSave').addEventListener('click', saveEditModal);
-}
-
-function openEditModal(id) {
-  const item = allItems.find(it => it.id === id);
-  if (!item) return;
-  editingId = id;
-
-  document.getElementById('editRef').value = item.ref;
-  document.getElementById('editEmp').value = item.emplacement;
-  document.getElementById('editQte').value = item.quantite;
-  document.getElementById('editDes').value = item.designation || '';
-  document.getElementById('editTyp').value = item.type || '';
-  document.getElementById('editS5').checked = !!item.seuil5;
-  document.getElementById('editS10').checked = !!item.seuil10;
-
-  document.getElementById('editModal').classList.add('show');
-}
-
-function closeEditModal() {
-  document.getElementById('editModal').classList.remove('show');
-  editingId = null;
-}
-
-async function saveEditModal() {
-  if (editingId == null) return;
-  const item = allItems.find(it => it.id === editingId);
-  if (!item) return;
-
-  const ref = document.getElementById('editRef').value.trim();
-  const emp = document.getElementById('editEmp').value.trim();
-  if (!ref || !emp) { showToast('Référence et emplacement obligatoires.'); return; }
-
-  item.ref = ref;
-  item.emplacement = emp;
-  item.quantite = Number(document.getElementById('editQte').value) || 0;
-  item.designation = document.getElementById('editDes').value.trim();
-  item.type = document.getElementById('editTyp').value.trim();
-  item.seuil5 = document.getElementById('editS5').checked;
-  item.seuil10 = document.getElementById('editS10').checked;
-
-  await dbUpdate(item);
-  await autoSave();
-  await refreshCache();
-  updateStatusBar();
-  closeEditModal();
-  renderAlertes();
-  showToast('Article modifié.');
-}
-
-/* ============================================================
-   EXPORT / IMPORT MANUEL
-   ============================================================ */
-function bindExportImport() {
-  document.getElementById('btnExport').addEventListener('click', async () => {
-    await exportToFile();
-    showToast('Sauvegarde exportée.');
-  });
-
-  const fileInput = document.getElementById('fileImport');
-  document.getElementById('btnImport').addEventListener('click', () => fileInput.click());
-
-  fileInput.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    if (!confirm('Restaurer cette sauvegarde remplacera toutes les données actuelles. Continuer ?')) {
-      fileInput.value = '';
-      return;
-    }
-    try {
-      await importFromFile(file);
-      await refreshCache();
-      updateStatusBar();
-      renderAlertes();
-      showToast('Sauvegarde restaurée.');
-    } catch (err) {
-      showToast('Fichier invalide.');
-    }
-    fileInput.value = '';
-  });
-}
-
-/* ---------- Utilitaire ---------- */
-function escapeHtml(str) {
-  return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
+    </section>
+ 
+    <!-- ===================== ALERTES ===================== -->
+    <section class="panel" id="panel-alertes">
+ 
+      <div id="alertesLocked" class="card" data-tag="Accès protégé">
+        <label>Code d'accès</label>
+        <input type="text" id="alertesPinInput" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off" style="text-align:center; font-family:var(--mono); font-size:22px; letter-spacing:0.5em;">
+        <button class="primary" id="btnUnlockAlertes" style="margin-top:14px;">Déverrouiller</button>
+        <div class="meta-line" id="alertesPinMsg" style="text-align:left; color:var(--rust);"></div>
+      </div>
+ 
+      <div id="alertesContent" style="display:none;">
+        <div class="card" data-tag="Sous le seuil">
+          <div id="alertesList"></div>
+          <div class="meta-line" id="alertesMeta"></div>
+        </div>
+        <button class="ghost" id="btnExport">Exporter une sauvegarde (.json)</button>
+        <button class="ghost" id="btnImport">Restaurer une sauvegarde (.json)</button>
+        <input type="file" id="fileImport" accept="application/json" style="display:none;">
+      </div>
+ 
+    </section>
+ 
+  </main>
+ 
+</div>
+ 
+<!-- ===================== MODALE ÉDITION ===================== -->
+<div id="editModal">
+  <div class="sheet">
+    <h2>Modifier l'article</h2>
+ 
+    <label>Référence</label>
+    <input type="text" id="editRef">
+ 
+    <label>Emplacement</label>
+    <input type="text" id="editEmp">
+ 
+    <label>Quantité</label>
+    <input type="number" id="editQte">
+ 
+    <label>Désignation</label>
+    <input type="text" id="editDes">
+ 
+    <label>Type</label>
+    <input type="text" id="editTyp">
+ 
+    <div class="checkline">
+      <input type="checkbox" id="editS5">
+      <label for="editS5">Alerte sous seuil 5</label>
+    </div>
+    <div class="checkline">
+      <input type="checkbox" id="editS10">
+      <label for="editS10">Alerte sous seuil 10</label>
+    </div>
+ 
+    <div class="modal-actions">
+      <button class="ghost" id="btnEditCancel">Annuler</button>
+      <button class="primary" id="btnEditSave">Enregistrer</button>
+    </div>
+  </div>
+</div>
+ 
+<div id="toast"></div>
+ 
+<script src="db.js"></script>
+<script src="app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(err => console.warn('SW non enregistré :', err));
+    });
+  }
+</script>
+</body>
+</html>
+ 
