@@ -41,18 +41,6 @@
   }
 
   /* ---------- Texture de fond : grille discrète d'atelier ---------- */
-  body::before{
-    content:"";
-    position:fixed; inset:0;
-    background-image:
-      linear-gradient(var(--line) 1px, transparent 1px),
-      linear-gradient(90deg, var(--line) 1px, transparent 1px);
-    background-size: 28px 28px;
-    opacity:0.35;
-    pointer-events:none;
-    z-index:0;
-  }
-
   #app{ position:relative; z-index:1; max-width:480px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; }
 
   /* ---------- Tablette : la colonne s'élargit pour remplir l'écran ---------- */
@@ -298,6 +286,22 @@
 
   ::-webkit-scrollbar{ width:0; height:0; }
 
+  /* ---------- Logo en bas de l'onglet Recherche ---------- */
+  .brand-footer{
+    display:flex;
+    justify-content:center;
+    padding:18px 0 8px;
+  }
+  .brand-footer-logo{
+    width:70%;
+    max-width:300px;
+    height:auto;
+    display:block;
+  }
+  @media (min-width: 700px){
+    .brand-footer-logo{ max-width:380px; }
+  }
+
   /* ---------- Écran de verrouillage ---------- */
   #lockScreen{
     position:fixed; inset:0; z-index:100;
@@ -431,6 +435,10 @@
         <button class="primary" id="btnCommander">Commander — quantité à zéro</button>
 
         <button class="ghost" id="btnResetForm">Effacer la recherche</button>
+      </div>
+
+      <div class="brand-footer">
+        <img src="logo-esme.png" alt="ESME" class="brand-footer-logo">
       </div>
 
     </section>
