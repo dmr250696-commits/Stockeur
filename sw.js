@@ -3,7 +3,7 @@
    IndexedDB (données) est géré séparément dans db.js
    ============================================================ */
 
-const CACHE_NAME = 'stock-atelier-v2';
+const CACHE_NAME = 'stock-atelier-v3';
 const FILES_TO_CACHE = [
   './index.html',
   './app.js',
