@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
- 
+
 <style>
   :root{
     --ink:#1B1F23;
@@ -28,7 +28,7 @@
     --mono:'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
     --sans:'Inter', -apple-system, system-ui, sans-serif;
   }
- 
+
   *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html,body{ height:100%; }
   body{
@@ -39,7 +39,7 @@
     overscroll-behavior-y:contain;
     padding-bottom:env(safe-area-inset-bottom);
   }
- 
+
   /* ---------- Texture de fond : grille discrète d'atelier ---------- */
   body::before{
     content:"";
@@ -52,9 +52,9 @@
     pointer-events:none;
     z-index:0;
   }
- 
+
   #app{ position:relative; z-index:1; max-width:480px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; }
- 
+
   /* ---------- Header ---------- */
   header{
     background:var(--ink);
@@ -80,7 +80,7 @@
     flex-shrink:0;
   }
   .status-row{ display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:10px; letter-spacing:0.06em; color:#A9A39A; margin-top:6px; text-transform:uppercase; }
- 
+
   /* ---------- Onglets ---------- */
   nav.tabs{
     display:flex;
@@ -105,13 +105,13 @@
     color:var(--paper);
     border-bottom-color:var(--rust);
   }
- 
+
   main{ flex:1; padding:18px; padding-bottom:90px; }
- 
+
   .panel{ display:none; animation:fade .18s ease; }
   .panel.active{ display:block; }
   @keyframes fade{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
- 
+
   /* ---------- Cartes ---------- */
   .card{
     background:var(--paper-raised);
@@ -133,7 +133,7 @@
     color:var(--brass);
     text-transform:uppercase;
   }
- 
+
   label{
     display:block;
     font-family:var(--mono);
@@ -145,7 +145,7 @@
     margin-top:12px;
   }
   label:first-of-type{ margin-top:0; }
- 
+
   input[type=text], input[type=number], select{
     width:100%;
     border:1px solid var(--line);
@@ -158,7 +158,7 @@
   }
   input:focus, select:focus{ outline:none; border-color:var(--rust); }
   input[readonly]{ color:var(--ink-soft); background:#EFEBE2; }
- 
+
   .suggest{
     margin-top:2px;
     border:1px solid var(--line);
@@ -176,7 +176,7 @@
   }
   .suggest div b{ font-family:var(--mono); color:var(--rust-deep); font-weight:700; }
   .suggest div:active{ background:var(--warn-bg); }
- 
+
   /* ---------- Affichage quantité ---------- */
   .qty-block{ text-align:center; padding:6px 0 14px; }
   .qty-num{
@@ -188,7 +188,7 @@
   }
   .qty-num.low{ color:var(--rust); }
   .qty-label{ font-family:var(--mono); font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--ink-soft); margin-top:4px; }
- 
+
   .btnrow{ display:flex; gap:8px; margin-bottom:10px; }
   button.op{
     flex:1;
@@ -206,7 +206,7 @@
   button.op:disabled{ opacity:0.35; }
   button.op.plus{ border-color:var(--ok); color:var(--ok); }
   button.op.plus:active{ background:var(--ok); color:var(--paper); }
- 
+
   button.primary{
     width:100%;
     background:var(--rust);
@@ -223,7 +223,7 @@
   }
   button.primary:active{ background:var(--rust-deep); }
   button.primary:disabled{ opacity:0.4; }
- 
+
   button.ghost{
     width:100%;
     background:none;
@@ -238,11 +238,11 @@
     cursor:pointer;
     margin-top:8px;
   }
- 
+
   .checkline{ display:flex; align-items:center; gap:9px; margin-top:10px; }
   .checkline input{ width:18px; height:18px; accent-color:var(--rust); }
   .checkline label{ margin:0; text-transform:none; font-family:var(--sans); font-size:13.5px; color:var(--ink); letter-spacing:0; }
- 
+
   /* ---------- Liste alertes ---------- */
   .alert-row{
     display:flex; justify-content:space-between; align-items:center;
@@ -260,7 +260,7 @@
   .empty-state{ text-align:center; padding:30px 10px; }
   .empty-state .ok-mark{ font-size:30px; }
   .empty-state p{ font-family:var(--mono); font-size:12px; color:var(--ok); letter-spacing:0.04em; margin-top:8px; }
- 
+
   /* ---------- Toast ---------- */
   #toast{
     position:fixed; left:50%; bottom:22px; transform:translate(-50%, 14px);
@@ -274,15 +274,15 @@
     border-left:3px solid var(--rust);
   }
   #toast.show{ opacity:1; transform:translate(-50%, 0); }
- 
+
   /* ---------- Compteur bas de carte ---------- */
   .meta-line{
     font-family:var(--mono); font-size:10px; color:var(--ink-soft);
     text-align:right; margin-top:8px; letter-spacing:0.03em;
   }
- 
+
   ::-webkit-scrollbar{ width:0; height:0; }
- 
+
   /* ---------- Écran de verrouillage ---------- */
   #lockScreen{
     position:fixed; inset:0; z-index:100;
@@ -314,7 +314,7 @@
     font-family:var(--mono); font-size:10px; color:#6B6960;
     margin-top:30px; letter-spacing:0.03em; text-align:center;
   }
- 
+
   /* ---------- Ligne d'alerte avec actions ---------- */
   .alert-row{ flex-direction:column; align-items:stretch; gap:8px; }
   .alert-row-top{ display:flex; justify-content:space-between; align-items:center; }
@@ -328,7 +328,7 @@
   .btn-edit:active{ background:var(--brass); color:var(--paper); }
   .btn-del{ background:var(--paper); border:1px solid var(--rust); color:var(--rust); }
   .btn-del:active{ background:var(--rust); color:var(--paper); }
- 
+
   /* ---------- Modale d'édition ---------- */
   #editModal{
     position:fixed; inset:0; z-index:90;
@@ -352,7 +352,7 @@
   }
   .modal-actions{ display:flex; gap:8px; margin-top:16px; }
   .modal-actions button{ flex:1; }
- 
+
   .sync-tag{
     display:inline-flex; align-items:center; gap:5px;
     font-family:var(--mono); font-size:9.5px; letter-spacing:0.05em; text-transform:uppercase;
@@ -362,9 +362,9 @@
 </style>
 </head>
 <body>
- 
+
 <div id="app">
- 
+
   <header>
     <div class="brand">
       <h1>STOCK<span>//</span>ATELIER</h1>
@@ -372,82 +372,73 @@
     </div>
     <div class="status-row"><span id="statusText">Données locales — 0 référence</span></div>
   </header>
- 
+
   <nav class="tabs">
     <button class="active" data-tab="recherche">Recherche</button>
     <button data-tab="ajout">Ajouter</button>
     <button data-tab="alertes">Alertes</button>
   </nav>
- 
+
   <main>
- 
+
     <!-- ===================== RECHERCHE ===================== -->
     <section class="panel active" id="panel-recherche">
- 
+
       <div class="card" data-tag="Référence">
         <label>Chercher par référence</label>
         <input type="text" id="searchRef" placeholder="ex. F2…" autocomplete="off">
         <div class="suggest" id="suggRef"></div>
- 
+
         <label>Chercher par désignation</label>
         <input type="text" id="searchDes" placeholder="ex. vis…" autocomplete="off">
         <div class="suggest" id="suggDes"></div>
- 
+
         <label>Emplacement</label>
         <select id="selectEmp"><option value="">—</option></select>
- 
+
         <label>Type</label>
         <input type="text" id="fieldTyp" readonly>
       </div>
- 
+
       <div class="card" data-tag="Quantité" id="cardQty" style="display:none;">
         <div class="qty-block">
           <div class="qty-num" id="qtyNum">0</div>
           <div class="qty-label" id="qtyRefLabel">—</div>
         </div>
- 
+
         <div class="btnrow">
           <button class="op plus" data-d="1">+1</button>
           <button class="op" data-d="-1">−1</button>
           <button class="op" data-d="-5">−5</button>
           <button class="op" data-d="-10">−10</button>
         </div>
- 
+
         <button class="primary" id="btnCommander">Commander — quantité à zéro</button>
- 
-        <div class="checkline">
-          <input type="checkbox" id="chkS5">
-          <label for="chkS5">Alerte sous seuil 5</label>
-        </div>
-        <div class="checkline">
-          <input type="checkbox" id="chkS10">
-          <label for="chkS10">Alerte sous seuil 10</label>
-        </div>
- 
+
         <button class="ghost" id="btnResetForm">Effacer la recherche</button>
       </div>
- 
+
     </section>
- 
+
     <!-- ===================== AJOUT ===================== -->
     <section class="panel" id="panel-ajout">
       <div class="card" data-tag="Nouvel article">
- 
+
         <label>Référence *</label>
         <input type="text" id="newRef" autocomplete="off">
- 
+
         <label>Emplacement *</label>
         <input type="text" id="newEmp" autocomplete="off">
- 
+
         <label>Quantité initiale</label>
         <input type="number" id="newQte" value="0">
- 
+
         <label>Désignation</label>
         <input type="text" id="newDes" autocomplete="off">
- 
+
         <label>Type</label>
         <input type="text" id="newTyp" autocomplete="off">
- 
+
         <div class="checkline">
           <input type="checkbox" id="newS5">
           <label for="newS5">Alerte sous seuil 5</label>
@@ -456,21 +447,21 @@
           <input type="checkbox" id="newS10">
           <label for="newS10">Alerte sous seuil 10</label>
         </div>
- 
+
         <button class="primary" id="btnAjouter" style="margin-top:14px;">Ajouter à l'inventaire</button>
       </div>
     </section>
- 
+
     <!-- ===================== ALERTES ===================== -->
     <section class="panel" id="panel-alertes">
- 
+
       <div id="alertesLocked" class="card" data-tag="Accès protégé">
         <label>Code d'accès</label>
         <input type="text" id="alertesPinInput" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="off" style="text-align:center; font-family:var(--mono); font-size:22px; letter-spacing:0.5em;">
         <button class="primary" id="btnUnlockAlertes" style="margin-top:14px;">Déverrouiller</button>
         <div class="meta-line" id="alertesPinMsg" style="text-align:left; color:var(--rust);"></div>
       </div>
- 
+
       <div id="alertesContent" style="display:none;">
         <div class="card" data-tag="Sous le seuil">
           <div id="alertesList"></div>
@@ -480,33 +471,33 @@
         <button class="ghost" id="btnImport">Restaurer une sauvegarde (.json)</button>
         <input type="file" id="fileImport" accept="application/json" style="display:none;">
       </div>
- 
+
     </section>
- 
+
   </main>
- 
+
 </div>
- 
+
 <!-- ===================== MODALE ÉDITION ===================== -->
 <div id="editModal">
   <div class="sheet">
     <h2>Modifier l'article</h2>
- 
+
     <label>Référence</label>
     <input type="text" id="editRef">
- 
+
     <label>Emplacement</label>
     <input type="text" id="editEmp">
- 
+
     <label>Quantité</label>
     <input type="number" id="editQte">
- 
+
     <label>Désignation</label>
     <input type="text" id="editDes">
- 
+
     <label>Type</label>
     <input type="text" id="editTyp">
- 
+
     <div class="checkline">
       <input type="checkbox" id="editS5">
       <label for="editS5">Alerte sous seuil 5</label>
@@ -515,16 +506,16 @@
       <input type="checkbox" id="editS10">
       <label for="editS10">Alerte sous seuil 10</label>
     </div>
- 
+
     <div class="modal-actions">
       <button class="ghost" id="btnEditCancel">Annuler</button>
       <button class="primary" id="btnEditSave">Enregistrer</button>
     </div>
   </div>
 </div>
- 
+
 <div id="toast"></div>
- 
+
 <script src="db.js"></script>
 <script src="app.js"></script>
 <script>
@@ -536,4 +527,3 @@
 </script>
 </body>
 </html>
- 
