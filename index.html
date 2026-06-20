@@ -55,6 +55,21 @@
 
   #app{ position:relative; z-index:1; max-width:480px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; }
 
+  /* ---------- Tablette : la colonne s'élargit pour remplir l'écran ---------- */
+  @media (min-width: 700px){
+    #app{ max-width:760px; }
+    main{ padding:24px 32px; }
+    .card{ padding:22px 26px; }
+    nav.tabs{ padding:0 32px; }
+    header{ padding:22px 32px 18px; }
+    input[type=text], input[type=number], select{ font-size:16.5px; padding:13px 12px; }
+    button.primary, button.op, button.ghost{ font-size:15.5px; padding:15px 0; }
+  }
+
+  @media (min-width: 1000px){
+    #app{ max-width:920px; }
+  }
+
   /* ---------- Header ---------- */
   header{
     background:var(--ink);
@@ -339,7 +354,7 @@
   }
   #editModal.show{ display:flex; }
   #editModal .sheet{
-    width:100%; max-width:480px;
+    width:100%; max-width:560px;
     background:var(--paper-raised);
     border-radius:10px 10px 0 0;
     padding:20px 18px calc(20px + env(safe-area-inset-bottom));
