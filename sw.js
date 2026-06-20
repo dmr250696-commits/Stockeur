@@ -3,14 +3,15 @@
    IndexedDB (données) est géré séparément dans db.js
    ============================================================ */
 
-const CACHE_NAME = 'stock-atelier-v1';
+const CACHE_NAME = 'stock-atelier-v2';
 const FILES_TO_CACHE = [
   './index.html',
   './app.js',
   './db.js',
   './manifest.json',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  './logo-esme.png'
 ];
 
 self.addEventListener('install', (event) => {
