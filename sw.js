@@ -3,8 +3,9 @@
    IndexedDB (données) est géré séparément dans db.js
    ============================================================ */
 
-const CACHE_NAME = 'stock-atelier-v3';
+const CACHE_NAME = 'stock-atelier-v4';
 const FILES_TO_CACHE = [
+  './',
   './index.html',
   './app.js',
   './db.js',
@@ -16,7 +17,17 @@ const FILES_TO_CACHE = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(FILES_TO_CACHE))
+    caches.open(CACHE_NAME).then(async (cache) => {
+      // Mise en cache fichier par fichier : un échec isolé ne bloque pas les autres
+      const results = await Promise.allSettled(
+        FILES_TO_CACHE.map(url => cache.add(url))
+      );
+      results.forEach((r, i) => {
+        if (r.status === 'rejected') {
+          console.warn('Échec mise en cache :', FILES_TO_CACHE[i], r.reason);
+        }
+      });
+    })
   );
   self.skipWaiting();
 });
@@ -31,12 +42,24 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+
   event.respondWith(
     caches.match(event.request).then(cached => {
-      if (cached) return cached;
+      // Cache-first : sert immédiatement le fichier local si présent
+      if (cached) {
+        // Tente une mise à jour en arrière-plan sans bloquer l'affichage
+        fetch(event.request).then(response => {
+          if (response && response.ok) {
+            caches.open(CACHE_NAME).then(cache => cache.put(event.request, response));
+          }
+        }).catch(() => { /* hors ligne, on garde la version en cache */ });
+        return cached;
+      }
+
+      // Rien en cache : tente le réseau, sinon retombe sur index.html (app shell)
       return fetch(event.request).then(response => {
-        // Met en cache toute nouvelle requête réussie du même domaine
-        if (response.ok && event.request.method === 'GET') {
+        if (response && response.ok) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
         }
