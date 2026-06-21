@@ -544,8 +544,41 @@
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').catch(err => console.warn('SW non enregistré :', err));
+      navigator.serviceWorker.register('sw.js')
+        .then(reg => {
+          // Vérifie que le service worker est bien actif (= app prête pour le hors-ligne)
+          if (navigator.serviceWorker.controller) {
+            setOfflineReady(true);
+          }
+          reg.addEventListener('updatefound', () => {
+            const newWorker = reg.installing;
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'activated') setOfflineReady(true);
+            });
+          });
+        })
+        .catch(err => {
+          console.warn('SW non enregistré :', err);
+          setOfflineReady(false);
+        });
+
+      navigator.serviceWorker.ready.then(() => setOfflineReady(true));
     });
+  } else {
+    setOfflineReady(false);
+  }
+
+  function setOfflineReady(ready) {
+    const dot = document.getElementById('statusDot');
+    const text = document.getElementById('statusText');
+    if (!dot || !text) return;
+    if (ready) {
+      dot.style.background = '#3E6B4F';
+      dot.title = 'Prêt pour le hors-ligne';
+    } else {
+      dot.style.background = '#B5502D';
+      dot.title = 'Pas encore prêt pour le hors-ligne — restez connecté quelques secondes';
+    }
   }
 </script>
 </body>
