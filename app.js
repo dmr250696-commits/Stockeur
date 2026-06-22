@@ -77,7 +77,9 @@ function lockAlertes() {
   document.getElementById('alertesPinMsg').textContent = '';
   // Réinitialiser aussi le module de recherche admin
   document.getElementById('adminSearchRef').value = '';
+  document.getElementById('adminSearchDes').value = '';
   document.getElementById('adminSuggRef').style.display = 'none';
+  document.getElementById('adminSuggDes').style.display = 'none';
   document.getElementById('adminResult').style.display = 'none';
   adminCurrentItem = null;
 }
@@ -446,7 +448,10 @@ let adminCurrentItem = null;
 function bindAdminSearch() {
   const input = document.getElementById('adminSearchRef');
   const sugg = document.getElementById('adminSuggRef');
+  const inputDes = document.getElementById('adminSearchDes');
+  const suggDes = document.getElementById('adminSuggDes');
 
+  // --- Recherche par référence ---
   input.addEventListener('input', () => {
     const q = input.value.trim().toUpperCase();
     sugg.innerHTML = '';
@@ -460,6 +465,8 @@ function bindAdminSearch() {
       div.innerHTML = `<b>${escapeHtml(item.ref)}</b><span>${escapeHtml(item.designation || '')}</span>`;
       div.addEventListener('click', () => {
         input.value = item.ref;
+        inputDes.value = '';
+        suggDes.style.display = 'none';
         sugg.style.display = 'none';
         adminLoadItem(item.ref);
       });
@@ -468,9 +475,36 @@ function bindAdminSearch() {
     sugg.style.display = 'block';
   });
 
+  // --- Recherche par désignation ---
+  inputDes.addEventListener('input', () => {
+    const q = inputDes.value.trim().toUpperCase();
+    suggDes.innerHTML = '';
+    if (!q) { suggDes.style.display = 'none'; adminHideResult(); return; }
+
+    const matches = uniqueByDes(allItems.filter(it => (it.designation || '').toUpperCase().includes(q)));
+    if (matches.length === 0) { suggDes.style.display = 'none'; return; }
+
+    matches.forEach(item => {
+      const div = document.createElement('div');
+      div.innerHTML = `<span>${escapeHtml(item.designation || '')}</span><b>${escapeHtml(item.ref)}</b>`;
+      div.addEventListener('click', () => {
+        inputDes.value = item.designation || '';
+        input.value = '';
+        sugg.style.display = 'none';
+        suggDes.style.display = 'none';
+        adminLoadItem(item.ref);
+      });
+      suggDes.appendChild(div);
+    });
+    suggDes.style.display = 'block';
+  });
+
   document.addEventListener('click', (e) => {
     if (!e.target.closest('#adminSearchRef') && !e.target.closest('#adminSuggRef')) {
       sugg.style.display = 'none';
+    }
+    if (!e.target.closest('#adminSearchDes') && !e.target.closest('#adminSuggDes')) {
+      suggDes.style.display = 'none';
     }
   });
 
@@ -524,6 +558,7 @@ async function adminSave() {
   renderAlertes();
   adminHideResult();
   document.getElementById('adminSearchRef').value = '';
+  document.getElementById('adminSearchDes').value = '';
   showToast('Article modifié.');
 }
 
@@ -538,5 +573,6 @@ async function adminDelete() {
   renderAlertes();
   adminHideResult();
   document.getElementById('adminSearchRef').value = '';
+  document.getElementById('adminSearchDes').value = '';
   showToast('Article supprimé.');
 }
