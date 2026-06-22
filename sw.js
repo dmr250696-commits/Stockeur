@@ -1,10 +1,10 @@
 /* ============================================================
-   SERVICE WORKER — Cache statique pour fonctionnement hors ligne
-   IndexedDB (données) est géré séparément dans db.js
+   SERVICE WORKER v5 — Cache-first absolu
+   L'app répond toujours depuis le cache, même sans réseau.
    ============================================================ */
 
-const CACHE_NAME = 'stock-atelier-v4';
-const FILES_TO_CACHE = [
+const CACHE_NAME = 'stock-atelier-v5';
+const APP_SHELL = [
   './',
   './index.html',
   './app.js',
@@ -15,56 +15,93 @@ const FILES_TO_CACHE = [
   './logo-esme.png'
 ];
 
+/* --- INSTALLATION : met tout en cache avant de se déclarer prêt --- */
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
-      // Mise en cache fichier par fichier : un échec isolé ne bloque pas les autres
       const results = await Promise.allSettled(
-        FILES_TO_CACHE.map(url => cache.add(url))
+        APP_SHELL.map(url =>
+          cache.add(new Request(url, { cache: 'reload' }))
+        )
       );
       results.forEach((r, i) => {
         if (r.status === 'rejected') {
-          console.warn('Échec mise en cache :', FILES_TO_CACHE[i], r.reason);
+          console.warn('[SW] Échec cache :', APP_SHELL[i]);
+        } else {
+          console.log('[SW] Mis en cache :', APP_SHELL[i]);
         }
       });
     })
   );
+  /* Prend le contrôle immédiatement sans attendre le prochain rechargement */
   self.skipWaiting();
 });
 
+/* --- ACTIVATION : supprime les anciens caches --- */
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
-    )
+      Promise.all(
+        keys
+          .filter(k => k !== CACHE_NAME)
+          .map(k => {
+            console.log('[SW] Suppression ancien cache :', k);
+            return caches.delete(k);
+          })
+      )
+    ).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
+/* --- FETCH : cache-first absolu ---
+   1. Si la ressource est en cache → la sert immédiatement
+      (tente une mise à jour silencieuse en arrière-plan si connecté)
+   2. Si pas en cache → tente le réseau
+   3. Si réseau échoue → sert index.html depuis le cache (app shell)
+      → jamais de page "inaccessible" de Chrome
+*/
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
+  /* Ignorer les requêtes cross-origin (analytics, etc.) */
+  const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return;
+
   event.respondWith(
-    caches.match(event.request).then(cached => {
-      // Cache-first : sert immédiatement le fichier local si présent
+    caches.open(CACHE_NAME).then(async (cache) => {
+      const cached = await cache.match(event.request);
+
       if (cached) {
-        // Tente une mise à jour en arrière-plan sans bloquer l'affichage
-        fetch(event.request).then(response => {
-          if (response && response.ok) {
-            caches.open(CACHE_NAME).then(cache => cache.put(event.request, response));
-          }
-        }).catch(() => { /* hors ligne, on garde la version en cache */ });
+        /* Ressource trouvée en cache : servie immédiatement */
+        /* Mise à jour silencieuse en arrière-plan si on a du réseau */
+        event.waitUntil(
+          fetch(event.request).then(response => {
+            if (response && response.ok) {
+              cache.put(event.request, response.clone());
+            }
+          }).catch(() => {/* pas de réseau, on garde le cache */})
+        );
         return cached;
       }
 
-      // Rien en cache : tente le réseau, sinon retombe sur index.html (app shell)
-      return fetch(event.request).then(response => {
+      /* Ressource absente du cache : tente le réseau */
+      try {
+        const response = await fetch(event.request);
         if (response && response.ok) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          cache.put(event.request, response.clone());
         }
         return response;
-      }).catch(() => caches.match('./index.html'));
+      } catch {
+        /* Réseau inaccessible ET pas en cache → retourne index.html */
+        const fallback = await cache.match('./index.html');
+        if (fallback) return fallback;
+
+        /* Dernier recours : réponse vide mais valide (évite l'erreur Chrome) */
+        return new Response('', {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' }
+        });
+      }
     })
   );
 });
