@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   bindAlertesLock();
   bindModal();
   bindExportImport();
+  bindAdminSearch();
   updateStatusBar();
 });
 
@@ -74,6 +75,11 @@ function lockAlertes() {
   document.getElementById('alertesContent').style.display = 'none';
   document.getElementById('alertesPinInput').value = '';
   document.getElementById('alertesPinMsg').textContent = '';
+  // Réinitialiser aussi le module de recherche admin
+  document.getElementById('adminSearchRef').value = '';
+  document.getElementById('adminSuggRef').style.display = 'none';
+  document.getElementById('adminResult').style.display = 'none';
+  adminCurrentItem = null;
 }
 
 /* ============================================================
@@ -429,4 +435,108 @@ function bindExportImport() {
 /* ---------- Utilitaire ---------- */
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ============================================================
+   MODULE ADMIN — Recherche et édition de tous les articles
+   (dans l'onglet Alertes, après déverrouillage)
+   ============================================================ */
+let adminCurrentItem = null;
+
+function bindAdminSearch() {
+  const input = document.getElementById('adminSearchRef');
+  const sugg = document.getElementById('adminSuggRef');
+
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toUpperCase();
+    sugg.innerHTML = '';
+    if (!q) { sugg.style.display = 'none'; adminHideResult(); return; }
+
+    const matches = uniqueByRef(allItems.filter(it => it.ref.toUpperCase().includes(q)));
+    if (matches.length === 0) { sugg.style.display = 'none'; return; }
+
+    matches.forEach(item => {
+      const div = document.createElement('div');
+      div.innerHTML = `<b>${escapeHtml(item.ref)}</b><span>${escapeHtml(item.designation || '')}</span>`;
+      div.addEventListener('click', () => {
+        input.value = item.ref;
+        sugg.style.display = 'none';
+        adminLoadItem(item.ref);
+      });
+      sugg.appendChild(div);
+    });
+    sugg.style.display = 'block';
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#adminSearchRef') && !e.target.closest('#adminSuggRef')) {
+      sugg.style.display = 'none';
+    }
+  });
+
+  document.getElementById('btnAdminSave').addEventListener('click', adminSave);
+  document.getElementById('btnAdminDelete').addEventListener('click', adminDelete);
+}
+
+function adminLoadItem(ref) {
+  const items = allItems.filter(it => it.ref.toUpperCase() === ref.toUpperCase());
+  if (items.length === 0) return;
+
+  // Si plusieurs emplacements, on prend le premier (la modale d'édition permet d'affiner)
+  adminCurrentItem = items[0];
+  const item = adminCurrentItem;
+
+  document.getElementById('adminRef').value = item.ref;
+  document.getElementById('adminEmp').value = item.emplacement;
+  document.getElementById('adminQte').value = item.quantite;
+  document.getElementById('adminDes').value = item.designation || '';
+  document.getElementById('adminTyp').value = item.type || '';
+  document.getElementById('adminS5').checked = !!item.seuil5;
+  document.getElementById('adminS10').checked = !!item.seuil10;
+
+  document.getElementById('adminResult').style.display = 'block';
+}
+
+function adminHideResult() {
+  adminCurrentItem = null;
+  document.getElementById('adminResult').style.display = 'none';
+}
+
+async function adminSave() {
+  if (!adminCurrentItem) return;
+
+  const ref = document.getElementById('adminRef').value.trim();
+  const emp = document.getElementById('adminEmp').value.trim();
+  if (!ref || !emp) { showToast('Référence et emplacement obligatoires.'); return; }
+
+  adminCurrentItem.ref = ref;
+  adminCurrentItem.emplacement = emp;
+  adminCurrentItem.quantite = Number(document.getElementById('adminQte').value) || 0;
+  adminCurrentItem.designation = document.getElementById('adminDes').value.trim();
+  adminCurrentItem.type = document.getElementById('adminTyp').value.trim();
+  adminCurrentItem.seuil5 = document.getElementById('adminS5').checked;
+  adminCurrentItem.seuil10 = document.getElementById('adminS10').checked;
+
+  await dbUpdate(adminCurrentItem);
+  await autoSave();
+  await refreshCache();
+  updateStatusBar();
+  renderAlertes();
+  adminHideResult();
+  document.getElementById('adminSearchRef').value = '';
+  showToast('Article modifié.');
+}
+
+async function adminDelete() {
+  if (!adminCurrentItem) return;
+  if (!confirm(`Supprimer définitivement ${adminCurrentItem.ref} (${adminCurrentItem.emplacement}) ?`)) return;
+
+  await dbDelete(adminCurrentItem.id);
+  await autoSave();
+  await refreshCache();
+  updateStatusBar();
+  renderAlertes();
+  adminHideResult();
+  document.getElementById('adminSearchRef').value = '';
+  showToast('Article supprimé.');
 }
